@@ -72,11 +72,9 @@ export class SesamClient {
   private static parseNotPaidHtml(regNumber: string, html: string): CheckUnpaidResult {
     const root = parse(html);
 
-    // Hvis responsen inneholder notfound eller mangler list_holder / payment_wrapper
+    // Hvis responsen inneholder notfound
     const notFoundElem = root.querySelector('.sesamsesam-parking-notfound');
-    const paymentWrappers = root.querySelectorAll('.payment_wrapper');
-
-    if (notFoundElem || paymentWrappers.length === 0) {
+    if (notFoundElem) {
       return {
         regNumber,
         hasUnpaid: false,
@@ -98,7 +96,10 @@ export class SesamClient {
         if (child.classList && child.classList.contains('cscustomer_h2')) {
           const ownerText = child.text.trim();
           currentOwner = ownerText.replace(/^Eieren:\s*/i, '').trim();
-        } else if (child.classList && child.classList.contains('payment_wrapper')) {
+        } else if (
+          (child.classList && (child.classList.contains('payment_wrapper') || child.classList.contains('list'))) ||
+          child.querySelector('input.sesamsesam-parking-payment, input.sesamsesam-parking-payment-diff, input[data-id]')
+        ) {
           const item = this.parseParkingWrapper(child, currentOwner);
           if (item) {
             parkings.push(item);
@@ -109,11 +110,28 @@ export class SesamClient {
 
     // Fallback if list_holder iteration didn't find items
     if (parkings.length === 0) {
-      const paymentWrappers = root.querySelectorAll('.payment_wrapper');
-      for (const pw of paymentWrappers) {
-        const item = this.parseParkingWrapper(pw);
+      const candidates = root.querySelectorAll('.payment_wrapper, .m_payment.list, .wpb_text_column.m_payment.list');
+      for (const cand of candidates) {
+        const item = this.parseParkingWrapper(cand);
         if (item) {
           parkings.push(item);
+        }
+      }
+    }
+
+    // Fallback 2: find any container with a parking payment input
+    if (parkings.length === 0) {
+      const inputs = root.querySelectorAll('input.sesamsesam-parking-payment, input.sesamsesam-parking-payment-diff, input[data-id]');
+      for (const inp of inputs) {
+        let current: HTMLElement | null = inp.parentNode as HTMLElement | null;
+        while (current && current instanceof HTMLElement && !current.classList.contains('m_payment') && !current.classList.contains('payment_wrapper') && current.tagName !== 'BODY') {
+          current = current.parentNode as HTMLElement | null;
+        }
+        if (current && current instanceof HTMLElement && current.tagName !== 'BODY') {
+          const item = this.parseParkingWrapper(current);
+          if (item && !parkings.some(p => p.id === item.id)) {
+            parkings.push(item);
+          }
         }
       }
     }
@@ -131,30 +149,33 @@ export class SesamClient {
     };
   }
 
-
   private static parseParkingWrapper(wrapper: HTMLElement, defaultOwner?: string): UnpaidParkingItem | null {
     // ID fra input checkbox
-    const inputElem = wrapper.querySelector('input.sesamsesam-parking-payment-diff');
+    const inputElem = wrapper.querySelector('input.sesamsesam-parking-payment, input.sesamsesam-parking-payment-diff, input[data-id]');
     const id = inputElem?.getAttribute('data-id') || inputElem?.getAttribute('id') || '';
 
     // Anleggsnavn fra <h3>
     const h3Elem = wrapper.querySelector('h3');
+    if (!id && !h3Elem) {
+      return null;
+    }
+
     const facility = h3Elem ? h3Elem.text.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim() : 'Ukjent anlegg';
 
-    // Tidspunkt og varighet fra <p> som har ikoner
-    const pElements = wrapper.querySelectorAll('.m_payment.list .wpb_wrapper p');
+    // Tidspunkt og varighet fra alle <p>-elementer
+    const pElements = wrapper.querySelectorAll('p');
     let dateRangeText = '';
     let durationStr = '';
 
     for (const p of pElements) {
       const fullText = p.text;
-      if (p.querySelector('.fa-calendar-alt') || fullText.includes('(') && fullText.includes(')')) {
+      if (p.querySelector('.fa-calendar-alt') || (fullText.includes('(') && fullText.includes(')'))) {
         dateRangeText = fullText;
       }
       if (p.querySelector('.fa-clock') || fullText.includes('timer') || fullText.includes('minutter')) {
-        const clockMatch = fullText.match(/\b\d+\s*timer.*|\b\d+\s*minutter.*/i);
+        const clockMatch = fullText.match(/\b\d+\s*timer(?:og|\s*og\s*)?\d*\s*minutter.*|\b\d+\s*timer.*|\b\d+\s*minutter.*/i);
         if (clockMatch) {
-          durationStr = clockMatch[0].trim();
+          durationStr = clockMatch[0].trim().replace(/timerog/gi, 'timer og ');
         }
       }
     }
@@ -162,7 +183,7 @@ export class SesamClient {
     const { startTime, endTime, startTimeStr, endTimeStr } = this.parseDateRange(dateRangeText);
 
     // Beløp
-    const amountElem = wrapper.querySelector('.sesamsesam-parking-amount-diff');
+    const amountElem = wrapper.querySelector('.sesamsesam-parking-amount, .sesamsesam-parking-amount-diff');
     const amount = amountElem ? this.parseAmount(amountElem.text) : 0;
 
     // Frist = endTime + 48 timer
