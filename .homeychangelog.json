@@ -34,5 +34,8 @@
   },
   "1.0.11": {
     "en": "Fix for multiple parkings"
+  },
+  "1.0.12": {
+    "en": "Neccessary changes after updated Sesam web page"
   }
 }
