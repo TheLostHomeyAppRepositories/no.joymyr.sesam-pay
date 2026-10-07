@@ -28,6 +28,7 @@ module.exports = {
         facility: d.getCapabilityValue('sesam_facility') || 'Ingen',
         hoursRemaining: parseFloat(rawHours) || 0,
         paymentUrl: (d as any).currentPaymentUrl || 'https://sesam-sesam.com/betal-for-parkering/',
+        totalPaymentUrl: (d as any).currentTotalPaymentUrl || (d as any).currentPaymentUrl || 'https://sesam-sesam.com/betal-for-parkering/',
         parkings,
         unpaidCount,
         uniqueFacilitiesCount: uniqueFacilities.length,

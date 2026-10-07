@@ -5,6 +5,7 @@ import { CheckUnpaidResult, UnpaidParkingItem } from '../../lib/types';
 module.exports = class VehicleDevice extends Homey.Device {
 
   public currentPaymentUrl: string = '';
+  public currentTotalPaymentUrl: string = '';
   public currentParkings: UnpaidParkingItem[] = [];
   private pollTimer: NodeJS.Timeout | null = null;
   private knownParkingIds: Set<string> = new Set();
@@ -244,10 +245,28 @@ module.exports = class VehicleDevice extends Homey.Device {
         }
       }
 
+      // Hent samlet betalingslenke for alle parkeringer dersom det er flere
+      let totalPaymentUrl = 'https://sesam-sesam.com/betal-for-parkering/';
+      if (result.parkings.length > 1) {
+        try {
+          const allIds = result.parkings.map(p => p.id).filter(Boolean);
+          const totalPayRes = await SesamClient.getPaymentRedirectUrl(allIds, email);
+          if (totalPayRes && totalPayRes.redirectUrl) {
+            totalPaymentUrl = totalPayRes.redirectUrl;
+          }
+        } catch (err: any) {
+          this.log(`Kunne ikke hente samlet betalingslenke: ${err.message}`);
+        }
+      } else if (result.parkings.length === 1 && result.parkings[0].paymentUrl) {
+        totalPaymentUrl = result.parkings[0].paymentUrl;
+      }
+
       this.currentParkings = result.parkings;
       const primary = result.parkings[0];
       const paymentUrl = primary.paymentUrl || 'https://sesam-sesam.com/betal-for-parkering/';
       this.currentPaymentUrl = paymentUrl;
+      this.currentTotalPaymentUrl = totalPaymentUrl;
+      result.totalPaymentUrl = totalPaymentUrl;
 
       // Finn tidligste frist blant alle aktive parkeringer
       const validHours = result.parkings
@@ -360,6 +379,7 @@ module.exports = class VehicleDevice extends Homey.Device {
       this.warnedDeadlineIds.clear();
       this.currentParkings = [];
       this.currentPaymentUrl = '';
+      this.currentTotalPaymentUrl = '';
 
       await this.setCapabilityValue('alarm_generic', false).catch((err: any) => this.error(err));
       await this.setCapabilityValue('sesam_unpaid_amount', '0 kr').catch((err: any) => this.error(err));

@@ -22,6 +22,7 @@ export interface CheckUnpaidResult {
   currency: string;
   parkings: UnpaidParkingItem[];
   checkedAt: Date;
+  totalPaymentUrl?: string;
   rawHtml?: string;
 }
 

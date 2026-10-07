@@ -63,6 +63,7 @@ module.exports = class VehicleDriver extends Homey.Driver {
         const hoursRemaining = parseFloat(rawHours) || 0;
         
         const paymentUrl = (device as any).currentPaymentUrl || 'https://sesam-sesam.com/betal-for-parkering/';
+        const totalPaymentUrl = (device as any).currentTotalPaymentUrl || (device as any).currentPaymentUrl || 'https://sesam-sesam.com/betal-for-parkering/';
         const parkings = (device as any).currentParkings || [];
         const unpaidCount = Number(device.getCapabilityValue('sesam_unpaid_count')) || parkings.length;
         const uniqueFacilities = Array.from(new Set(parkings.map((p: any) => (p.facility || '').trim()).filter(Boolean)));
@@ -76,6 +77,7 @@ module.exports = class VehicleDriver extends Homey.Driver {
           facility,
           hoursRemaining,
           paymentUrl,
+          totalPaymentUrl,
           parkings,
           unpaidCount,
           uniqueFacilitiesCount: uniqueFacilities.length,
@@ -91,6 +93,7 @@ module.exports = class VehicleDriver extends Homey.Driver {
           facility: 'Ingen',
           hoursRemaining: 0,
           paymentUrl: 'https://sesam-sesam.com/betal-for-parkering/',
+          totalPaymentUrl: 'https://sesam-sesam.com/betal-for-parkering/',
           parkings: [],
           unpaidCount: 0,
           uniqueFacilitiesCount: 0,
